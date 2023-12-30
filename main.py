@@ -6,8 +6,13 @@ import datetime
 def main():
     options = get_options()
     canvas_user, caldav_calendar = get_connections(options)
-    mark_completed_todos(options, canvas_user, caldav_calendar)
-    add_canvas_todo(options, canvas_user, caldav_calendar)
+    assignment_todos = get_assignment_todos(
+        options, canvas_user, caldav_calendar
+    )
+    add_upcoming_assignments(
+        options, canvas_user, caldav_calendar, assignment_todos
+    )
+    mark_completed_assignments(canvas_user, assignment_todos)
 
 def get_connections(options):
     canvas = Canvas(options.canvas_url, options.canvas_api_key)
@@ -19,7 +24,8 @@ def get_connections(options):
     caldav_calendar = caldav_client.calendar(url=options.caldav_calendar_url)
     return canvas_user, caldav_calendar
 
-def mark_completed_todos(options, canvas_user, caldav_calendar):
+def get_assignment_todos(options, canvas_user, caldav_calendar):
+    assignment_todos = {}
     for todo in caldav_calendar.todos():
         if (
             "CATEGORIES" in todo.icalendar_component and
@@ -31,15 +37,22 @@ def mark_completed_todos(options, canvas_user, caldav_calendar):
                     todo.icalendar_component["SUMMARY"]
                 ))
             assignment_id = id_line[len(options.description_id_prefix):]
-            print(assignment_id)
+            assignment_todos[assignment_id] = todo
+    return assignment_todos
 
-def add_canvas_todo(options, canvas_user, caldav_calendar):
+def add_upcoming_assignments(
+    options, canvas_user, caldav_calendar, assignment_todos
+):
     upcoming_assigments = []
     #looks like rate-limit is designed to allow sequential use,
     #so since there's no multi-threading, no need to worry about it.
     #https://canvas.instructure.com/doc/api/file.throttling.html
     for course in canvas_user.get_courses(enrollment_state="active"):
         for assignment in course.get_assignments():
+            assignment_id = "{}:{}".format(course.id, assignment.id)
+            if assignment_id in assignment_todos:
+                continue
+
             has_due = assignment.due_at != None
             if has_due:
                 due = datetime.datetime.strptime(
@@ -53,15 +66,18 @@ def add_canvas_todo(options, canvas_user, caldav_calendar):
                 )) or
                 (not has_due and options.no_due)
             ):
-                submission = assignment.get_submission(canvas_user)
-                completed = submission.attempt != None
-                if not completed:
-                    upcoming_assigments.append({
-                        "name":assignment.name,
-                        "id":assignment.id,
-                        "due":due,
-                    })
-    print(upcoming_assigments)
+                new_todo = caldav_calendar.save_todo(
+                    summary=assignment.name, due=due,
+                    categories=[options.category],
+                    description="{}{}\nCourse: {}".format(
+                        options.description_id_prefix, assignment_id,
+                        course.name
+                    )
+                )
+                assignment_todos[assignment_id] = new_todo
+
+def mark_completed_assignments(canvas_user, assignment_todos):
+    pass
 
 def get_options():
     parser = configargparse.ArgParser(
