@@ -26,7 +26,7 @@ def get_connections(options):
 
 def get_assignment_todos(options, canvas_user, caldav_calendar):
     assignment_todos = {}
-    for todo in caldav_calendar.todos():
+    for todo in caldav_calendar.todos(include_completed=True):
         if (
             "CATEGORIES" in todo.icalendar_component and
             options.category in todo.icalendar_component["CATEGORIES"].cats
@@ -77,7 +77,21 @@ def add_upcoming_assignments(
                 assignment_todos[assignment_id] = new_todo
 
 def mark_completed_assignments(canvas_user, assignment_todos):
-    pass
+    courses = {}
+    for course in canvas_user.get_courses(enrollment_state="active"):
+        courses[course.id] = course
+
+    for assignment_id, assignment_todo in assignment_todos.items():
+        if assignment_todo.icalendar_component["STATUS"] == "COMPLETED":
+            continue
+
+        course_id, assignment_id = assignment_id.split(":")
+        assignment = courses[int(course_id)].get_assignment(
+            int(assignment_id)
+        )
+        completed = assignment.get_submission(canvas_user).attempt != None
+        if completed:
+            assignment_todo.complete()
 
 def get_options():
     parser = configargparse.ArgParser(
