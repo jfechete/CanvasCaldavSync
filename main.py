@@ -67,6 +67,9 @@ def add_upcoming_assignments(
                     due = due.replace(tzinfo=pytz.utc).astimezone(
                         pytz.timezone(options.timezone)
                     )
+                if due.hour <= options.fallback_hour:
+                    due -= datetime.timedelta(days=1)
+                    due = due.replace(hour=23, minute=59)
 
             if (
                 (has_due and (
@@ -160,6 +163,13 @@ def get_options():
     parser.add_argument(
         "--timezone",
         help="What timezone to convert due date to"
+    )
+    parser.add_argument(
+        "--fallback-hour", type=int, default=-1,
+        help=(
+            "If due on or before this hour, "
+            "set due date back to previous day right before midnight"
+        )
     )
     return parser.parse_args()
 
