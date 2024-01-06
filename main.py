@@ -2,6 +2,7 @@ from canvasapi import Canvas
 import caldav
 import configargparse
 import datetime
+import pytz
 
 def main():
     options = get_options()
@@ -44,6 +45,9 @@ def add_upcoming_assignments(
     options, canvas_user, caldav_calendar, assignment_todos
 ):
     upcoming_assigments = []
+    now = datetime.datetime.now()
+    if options.timezone != None:
+        now = now.astimezone(pytz.timezone(options.timezone))
     #looks like rate-limit is designed to allow sequential use,
     #so since there's no multi-threading, no need to worry about it.
     #https://canvas.instructure.com/doc/api/file.throttling.html
@@ -58,11 +62,15 @@ def add_upcoming_assignments(
                 due = datetime.datetime.strptime(
                     assignment.due_at,
                     "%Y-%m-%dT%H:%M:%SZ"
-                )+datetime.timedelta(hours=options.timezone_offset)
+                )
+                if options.timezone != None:
+                    due = due.replace(tzinfo=pytz.utc).astimezone(
+                        pytz.timezone(options.timezone)
+                    )
 
             if (
                 (has_due and (
-                    (due-datetime.datetime.now()).days <= options.look_ahead
+                    (due-now).days <= options.look_ahead
                 )) or
                 (not has_due and options.no_due)
             ):
@@ -150,8 +158,8 @@ def get_options():
         help="Include assignments with no due date"
     )
     parser.add_argument(
-        "--timezone-offset", type=int, default=0,
-        help="How many hours to offset from due date to account for timezone"
+        "--timezone",
+        help="What timezone to convert due date to"
     )
     return parser.parse_args()
 
