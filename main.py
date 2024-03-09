@@ -13,7 +13,7 @@ def main():
     add_upcoming_assignments(
         options, canvas_user, caldav_calendar, assignment_todos
     )
-    mark_completed_assignments(canvas_user, assignment_todos)
+    update_existing_assignments(options, canvas_user, assignment_todos)
 
 def get_connections(options):
     canvas = Canvas(options.canvas_url, options.canvas_api_key)
@@ -57,25 +57,13 @@ def add_upcoming_assignments(
             if assignment_id in assignment_todos:
                 continue
 
-            has_due = assignment.due_at != None
-            if has_due:
-                due = datetime.datetime.strptime(
-                    assignment.due_at,
-                    "%Y-%m-%dT%H:%M:%SZ"
-                )
-                if options.timezone != None:
-                    due = due.replace(tzinfo=pytz.utc).astimezone(
-                        pytz.timezone(options.timezone)
-                    )
-                if due.hour <= options.fallback_hour:
-                    due -= datetime.timedelta(days=1)
-                    due = due.replace(hour=23, minute=59)
+            due = get_due_date(options, assignment)
 
             if (
-                (has_due and (
+                (due != None and (
                     (due-now).days <= options.look_ahead
                 )) or
-                (not has_due and options.no_due)
+                (due == None and options.no_due)
             ):
                 new_todo = caldav_calendar.save_todo(
                     summary=assignment.name, due=due,
@@ -87,7 +75,7 @@ def add_upcoming_assignments(
                 )
                 assignment_todos[assignment_id] = new_todo
 
-def mark_completed_assignments(canvas_user, assignment_todos):
+def update_existing_assignments(options, canvas_user, assignment_todos):
     courses = {}
     for course in canvas_user.get_courses(enrollment_state="active"):
         courses[course.id] = course
@@ -100,9 +88,31 @@ def mark_completed_assignments(canvas_user, assignment_todos):
         assignment = courses[int(course_id)].get_assignment(
             int(assignment_id)
         )
+
+        due = get_due_date(options, assignment)
+        if due != assignment_todo.icalendar_component["DUE"].dt:
+            assignment_todo.icalendar_component["DUE"].dt = due
+            assignment_todo.save()
+
         completed = assignment.get_submission(canvas_user).attempt != None
         if completed:
             assignment_todo.complete()
+
+def get_due_date(options, assignment):
+    due = assignment.due_at
+    if due != None:
+        due = datetime.datetime.strptime(
+            due,
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        if options.timezone != None:
+            due = due.replace(tzinfo=pytz.utc).astimezone(
+                pytz.timezone(options.timezone)
+            )
+        if due.hour <= options.fallback_hour:
+            due -= datetime.timedelta(days=1)
+            due = due.replace(hour=23, minute=59)
+    return due
 
 def get_options():
     parser = configargparse.ArgParser(
