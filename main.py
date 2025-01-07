@@ -81,7 +81,10 @@ def update_existing_assignments(options, canvas_user, assignment_todos):
         courses[course.id] = course
 
     for assignment_id, assignment_todo in assignment_todos.items():
-        if assignment_todo.icalendar_component["STATUS"] == "COMPLETED":
+        if (
+            "STATUS" in assignment_todo.icalendar_component and
+            assignment_todo.icalendar_component["STATUS"] == "COMPLETED"
+        ):
             continue
 
         course_id, assignment_id = assignment_id.split(":")
