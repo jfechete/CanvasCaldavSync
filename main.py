@@ -3,6 +3,11 @@ import caldav
 import configargparse
 import datetime
 import pytz
+import os
+
+SYSTEMD_CRED_VARIABLE = "CREDENTIALS_DIRECTORY"
+CANVAS_API_KEY_CRED = "canvas-api-key"
+CALDAV_PASSWORD_CRED = "caldav-password"
 
 def main():
     options = get_options()
@@ -134,7 +139,7 @@ def get_options():
         help="The canvas user to read courses/assignments for"
     )
     parser.add_argument(
-        "--canvas-api-key", required=True,
+        "--canvas-api-key",
         help="The canvas api key to use"
     )
     parser.add_argument(
@@ -146,7 +151,7 @@ def get_options():
         help="The caldav user"
     )
     parser.add_argument(
-        "--caldav-password", required=True,
+        "--caldav-password",
         help="The caldav password"
     )
     parser.add_argument(
@@ -184,7 +189,24 @@ def get_options():
             "set due date back to previous day right before midnight"
         )
     )
-    return parser.parse_args()
+
+    args = parser.parse_args()
+    cred_folder = os.getenv(SYSTEMD_CRED_VARIABLE)
+    if cred_folder is not None:
+        canvas_api_key_file = os.path.join(cred_folder, CANVAS_API_KEY_CRED)
+        caldav_password_file = os.path.join(cred_folder, CALDAV_PASSWORD_CRED)
+        if os.path.isfile(canvas_api_key_file):
+            with open(canvas_api_key_file) as fb:
+                args.canvas_api_key = fb.read()
+        if os.path.isfile(caldav_password_file):
+            with open(caldav_password_file) as fb:
+                args.caldav_password = fb.read()
+    if args.canvas_api_key is None:
+        raise ValueError("No canvas api key provided")
+    if args.caldav_password is None:
+        raise ValueError("No caldav password provided")
+
+    return args
 
 if __name__ == "__main__":
     main()
